@@ -305,6 +305,45 @@ int prompt(struct command_t *command) {
   tcsetattr(STDIN_FILENO, TCSANOW, &backup_termios);
   return SUCCESS;
 }
+char *path_resolver(char *command) {
+  //command has a slash we return its copy
+ 
+       	if (strchr(command, '/')) {
+   
+	  return strdup(command);
+  }
+
+  // getting path
+  char *enviroment_path = getenv("PATH");
+  if (!enviroment_path){
+	  return strdup(command);
+	  }
+
+  // copy path
+  char *copyp = strdup(enviroment_path);
+
+  char *directory = strtok(copyp, ":");
+
+  char buffybuffer[1024];
+
+  // looping for path
+  while (directory != NULL) {
+    snprintf(buffybuffer, sizeof(buffybuffer), "%s/%s", directory, command);
+
+    // checking for execution
+    if (access(buffybuffer, X_OK) == 0) {
+     
+	    free(copyp);
+    
+	    return strdup(buffybuffer);
+    }
+    directory = strtok(NULL, ":"); //next directory
+  }
+
+  free(copyp);
+ 
+  return strdup(command); //back to original command
+}
 
 int process_command(struct command_t *command) {
   int r;
@@ -336,12 +375,22 @@ int process_command(struct command_t *command) {
 
     // TODO: do your own exec with path resolving using execv()
     // do so by replacing the execvp call below
-    execvp(command->name, command->args); // exec+args+path
+    char *currpath = path_resolver(command->name);
+    execv(currpath, command->args);
+
+    
     printf("-%s: %s: command not found\n", sysname, command->name);
     exit(127);
   } else {
     // TODO: implement background processes here
-    wait(0); // wait for child process to finish
+    if (command->background) {
+      
+      printf("[%d] started in background\n", pid);
+    }
+    else {
+      // waiting for child
+      waitpid(pid, NULL, 0); 
+    }
     return SUCCESS;
   }
 }
