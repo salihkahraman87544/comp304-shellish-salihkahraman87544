@@ -6,6 +6,7 @@
 #include <sys/wait.h>
 #include <termios.h> // termios, TCSANOW, ECHO, ICANON
 #include <unistd.h>
+#include <fcntl.h>
 const char *sysname = "shellish";
 
 enum return_codes {
@@ -375,6 +376,48 @@ int process_command(struct command_t *command) {
 
     // TODO: do your own exec with path resolving using execv()
     // do so by replacing the execvp call below
+    if (command->redirects[0]) {
+     //for input red'rect'on
+	 int inputfd = open(command->redirects[0], O_RDONLY);
+     
+      if (inputfd < 0) {
+       
+	      perror("Input file cannot open");
+       
+	      exit(EXIT_FAILURE);
+      }
+     
+      dup2(inputfd, STDIN_FILENO); 
+      close(inputfd);
+    }
+    if (command->redirects[1]) {
+     // for output direction
+	 int outputfd = open(command->redirects[1], O_WRONLY | O_CREAT | O_TRUNC, 0666);
+     
+      if (outputfd < 0) {
+       
+ 	 perror("output file cannot opened");
+         exit(EXIT_FAILURE);
+      }
+     
+      dup2(outputfd, STDOUT_FILENO); 
+     
+      close(outputfd);
+    }
+   if (command->redirects[2]) {
+	//for appending
+	   int appendingfd = open(command->redirects[2], O_WRONLY | O_CREAT | O_APPEND, 0666);
+     	
+	   if (appendingfd < 0) {
+       		
+		 perror("append file cant open");
+       		 exit(EXIT_FAILURE);
+      }
+      dup2(appendingfd, STDOUT_FILENO);
+      close(appendingfd);
+    }
+
+
     char *currpath = path_resolver(command->name);
     execv(currpath, command->args);
 
