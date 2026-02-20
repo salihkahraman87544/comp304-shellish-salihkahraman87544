@@ -346,6 +346,127 @@ char *path_resolver(char *command) {
   return strdup(command); //back to original command
 }
 
+
+
+void func_cut(char **currinput) {
+   
+       	char curr_delimiter = '\t'; //def tab
+   
+       	char *stringfield = NULL;
+
+    //parsing the input for d and f
+    for (int x = 1; currinput[x] != NULL; x++) {
+       
+	    if (strncmp(currinput[x], "-d", 2) == 0) {// delimiter 
+           
+		    if (strlen(currinput[x]) > 2) {
+               
+			    curr_delimiter  = currinput[x][2]; //handling input for -d:
+            }
+	
+		    else if (currinput[x+1] != NULL) {
+               
+		 	     curr_delimiter  = currinput[x+1][0]; //handling input for -d ":"
+                
+			    x++;
+            }
+        }
+       
+    	    else if (strncmp(currinput[x], "-f", 2) == 0) { //fields 
+           
+	       	if (strlen(currinput[x]) > 2) {
+               
+		       	stringfield = currinput[x] + 2; //handling input for -f1,6
+            }
+	       	else if (currinput[x+1] != NULL) {
+               
+		       
+		       	stringfield = currinput[x+1];   //handling input for -f 1,6
+              
+		      	 x++;
+            }
+        }
+    }
+
+    if (!stringfield) {
+       
+	    fprintf(stderr, "f field dont specified\n");
+       
+	    return;
+    }
+
+    //parsing comma separated field indexes
+    int currfield[100];
+   
+    int cnt = 0;
+   
+    char *stringf = strdup(stringfield);
+   
+    char *currtoken = strtok(stringf, ",");
+    
+    while (currtoken != NULL && cnt < 100) {
+       
+	     currfield[cnt++] = atoi(currtoken);
+       
+	    currtoken = strtok(NULL, ",");
+    }
+   
+    free(stringf);
+
+    //processing stdin row by row 
+    char thisrow[4096];
+   
+    while (fgets(thisrow, sizeof(thisrow), stdin)) {
+       
+	 thisrow[strcspn(thisrow, "\n")] = 0; //cutting trailing newline
+
+        
+         char *fieldparsed[1000]; //splitting string by delimiter
+       
+       	int countparsed = 1;
+        
+       	fieldparsed[countparsed] = thisrow;
+        
+         int length = strlen(thisrow);
+       
+       	for (int x = 0; x < length; x++) {
+           
+	      	if (thisrow[x] == curr_delimiter ) {
+              
+		       	thisrow[x] = '\0'; //nullterminating at delimiter
+                
+		         countparsed++;
+               
+	 	       	fieldparsed[countparsed] = &thisrow[x + 1];
+            }
+        }
+
+        //printing in fields in order
+        int beginning = 1;
+       
+       	for (int i = 0; i < cnt; i++) {
+           
+	       	int indexf = currfield[i];
+            
+            //if field exist in curr line
+            if (indexf > 0 && indexf <= countparsed) {
+               
+		    if (!beginning){
+			   
+			    printf("%c", curr_delimiter);
+               }
+		    printf("%s", fieldparsed[indexf]);
+               
+		    beginning = 0;
+            }
+        }
+        printf("\n");
+    }
+}
+
+
+
+
 int process_command(struct command_t *command) {
   int r;
   if (strcmp(command->name, "") == 0)
@@ -483,6 +604,13 @@ int process_command(struct command_t *command) {
       close(appendingfd);
     }
 
+
+    if (strcmp(command->name, "cut") == 0) {
+     
+	    func_cut(command->args);
+    
+	    exit(SUCCESS);
+    }
 
     char *currpath = path_resolver(command->name);
     execv(currpath, command->args);
