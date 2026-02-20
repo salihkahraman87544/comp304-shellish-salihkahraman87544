@@ -363,6 +363,72 @@ int process_command(struct command_t *command) {
     }
   }
 
+  
+  if (command->next) {
+   
+	  int fdpiping[2];
+  
+	  if (pipe(fdpiping) < 0) {
+     
+		  perror("fail to pipe");
+    
+		  return SUCCESS;
+    }
+
+    pid_t newpid = fork();
+    if (newpid == 0) {
+      // pipe's left side
+      dup2(fdpiping[1], STDOUT_FILENO);
+     
+      close(fdpiping[0]);
+     
+      close(fdpiping[1]);
+      
+      
+      command->next = NULL; //severing the chain
+      process_command(command); //executing left side recursive
+      exit(SUCCESS);
+    }
+
+  
+    pid_t pidnew2 = fork();
+  
+    if (pidnew2 == 0) {
+      //reading right side of pipe
+     
+	    dup2(fdpiping[0], STDIN_FILENO);
+     
+	    close(fdpiping[0]);
+     
+	    close(fdpiping[1]);
+      
+     
+	    process_command(command->next); //executing rest of chain
+     
+	    exit(SUCCESS);
+    }
+
+    //parent close pipe
+    close(fdpiping[0]);
+   
+    close(fdpiping[1]);
+
+    if (command->background) {
+     
+	    printf("[%d] work in background", newpid);
+     
+	    printf("[%d] work in background", pidnew2);
+    }
+    else {
+     	
+	    waitpid(newpid, NULL, 0);
+     	
+	    waitpid(pidnew2, NULL, 0);
+    }
+    return SUCCESS;
+  }
+
+
   pid_t pid = fork();
   if (pid == 0) // child
   {
