@@ -614,6 +614,61 @@ void chat_func(char **inputs) {
 
 
 
+void reminder(char **inputs) {
+   
+       	if (inputs[1] == NULL || inputs[2] == NULL) {
+       
+	       	printf("remind <seconds> <message...>\n");
+       
+	       	return;
+    }
+
+    int time = atoi(inputs[1]);
+   
+    if (time <= 0) {
+        printf("seconds should be positive\n");
+        return;
+    }
+
+    //reconstructing the message
+    char this_message[1024] = "";
+   
+    for (int x = 2; inputs[x] != NULL; x++) {
+        
+	    strncat(this_message, inputs[x], sizeof(this_message) - strlen(this_message) - 1);
+       
+	    if (inputs[x+1] != NULL) {
+           
+		    strncat(this_message, " ", sizeof(this_message) - strlen(this_message) - 1);
+        }
+    }
+
+    // Fork a background process for the timer
+   
+    pid_t reminder_pid = fork();
+   
+    if (reminder_pid < 0) {
+        perror("fork failed");
+        return;
+    }
+
+    if (reminder_pid == 0) {
+      
+        sleep(time);
+        
+        // \a activates bell \n \r moves to new line without interfering the users current prompt 
+        printf("\n\r\a[REMINDER] %s\n", this_message);
+        
+        exit(0);
+
+    }
+    else {
+        //parent: print reminder and return
+        printf("[Reminder set for %d seconds from now (PID: %d)]\n", time, reminder_pid);
+    }
+}
+
+
 
 int process_command(struct command_t *command) {
   int r;
@@ -766,6 +821,13 @@ int process_command(struct command_t *command) {
      
 	    exit(SUCCESS);
     }
+
+    if (strcmp(command->name, "remind") == 0) {
+   
+	    reminder(command->args);
+   
+	    return SUCCESS;
+  }
 
     char *currpath = path_resolver(command->name);
     execv(currpath, command->args);
