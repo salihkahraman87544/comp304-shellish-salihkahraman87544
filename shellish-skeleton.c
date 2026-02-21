@@ -7,6 +7,10 @@
 #include <termios.h> // termios, TCSANOW, ECHO, ICANON
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <dirent.h> 
+#include <signal.h>
 const char *sysname = "shellish";
 
 enum return_codes {
@@ -466,6 +470,150 @@ void func_cut(char **currinput) {
 
 
 
+void chat_func(char **inputs) {
+   
+      	if (inputs[1] == NULL || inputs[2] == NULL) {
+       
+	       	printf("chatroom <roomname> <username>\n");
+       		 return;
+    }
+
+    char *room = inputs[1];
+   
+    char *user = inputs[2];
+   
+    char directory_room[256];
+   
+    char pipe_user[512];
+
+    //room folder creation
+   
+    snprintf(directory_room, sizeof(directory_room), "/tmp/chatroom-%s", room);
+   
+    mkdir(directory_room, 0777); 
+
+    //creating user pipe
+   
+    snprintf(pipe_user, sizeof(pipe_user), "%s/%s", directory_room, user);
+   
+    mkfifo(pipe_user, 0666); 
+
+    printf("entered room  %s\n", room);
+
+    pid_t pid_rc = fork();
+  
+    if (pid_rc == 0) {
+       
+	 //continously read receiver process
+        
+        int descriptor = open(pipe_user, O_RDWR); 
+       
+       	char bufferybuff[1024];
+       
+       	while (1) {
+            
+		int x = read(descriptor, bufferybuff, sizeof(bufferybuff) - 1);
+           
+	       	if (x > 0) {
+               
+		       	bufferybuff[x] = '\0';
+               
+		       	//clearing current line
+               		 printf("\r");
+		       
+		       	printf("                                                                                                                           ");
+               	 
+		         printf("\r[%s] %s\n", room, bufferybuff);
+		       
+			//prompt printing
+		       	printf("[%s] %s > ", room, user);
+		       	fflush(stdout);
+            }
+        }
+        exit(0);
+    }
+   
+    else {
+        //process for sender
+       
+ 	 char curr_message[1024];
+       
+	 char message_new[2048];
+        
+        while (1) {
+           
+	       	printf("[%s] %s > ", room, user);
+           
+	       	fflush(stdout);
+            
+            if (fgets(curr_message, sizeof(curr_message), stdin) == NULL){
+		    break;
+	    }
+	    //trimming newline
+            curr_message[strcspn(curr_message, "\n")] = '\0';
+            
+            if (strcmp(curr_message, "\\quit") == 0){
+		    break; //for exiting
+			   }
+            if (strlen(curr_message) == 0){
+		    continue; }
+
+            snprintf(message_new, sizeof(message_new), "%s: %s", user, curr_message);
+
+            // Iterate over all named pipes within the room's folder 
+           
+	    DIR *thisdir = opendir(directory_room);
+           
+	    if (thisdir) {
+               
+		    struct dirent *curr_dir;
+               
+		    while ((curr_dir = readdir(thisdir)) != NULL) {
+                   
+			    //dont write to . and .. and own pipe
+                            if (strcmp((*curr_dir).d_name, ".") != 0 && strcmp((*curr_dir).d_name, "..") != 0 &&  strcmp((*curr_dir).d_name, user) != 0) {
+                        
+                       		 //writing to all other pipes
+                       		 pid_t pid_sd = fork();
+                       
+			     if (pid_sd == 0) {
+                                 
+				     char pipe_trg[512];
+                                  
+				     snprintf(pipe_trg, sizeof(pipe_trg), "%s/%s", directory_room, curr_dir->d_name);
+                            
+                           	 //non blocking for operating under crash
+                            	
+				     int descout = open(pipe_trg, O_WRONLY | O_NONBLOCK);
+                           
+				     if (descout >= 0) {
+                               
+					   write(descout, message_new, strlen(message_new));
+                               		    close(descout);
+                            }
+                            exit(0);
+                        }
+			     else {
+                            
+				     waitpid(pid_sd, NULL, 0);
+                        }
+                    }
+                }
+                closedir(thisdir);
+            }
+        }
+        
+        //quitting
+        kill(pid_rc, SIGTERM);
+       
+       	waitpid(pid_rc, NULL, 0);
+       
+       	unlink(pipe_user);
+    }
+}
+
+
+
 
 int process_command(struct command_t *command) {
   int r;
@@ -609,6 +757,13 @@ int process_command(struct command_t *command) {
      
 	    func_cut(command->args);
     
+	    exit(SUCCESS);
+    }
+
+    if (strcmp(command->name, "chatroom") == 0) {
+     
+	    chat_func(command->args);
+     
 	    exit(SUCCESS);
     }
 
