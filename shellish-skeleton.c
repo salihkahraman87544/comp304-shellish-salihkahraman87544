@@ -11,6 +11,7 @@
 #include <sys/types.h>
 #include <dirent.h> 
 #include <signal.h>
+#include <ctype.h>
 const char *sysname = "shellish";
 
 enum return_codes {
@@ -670,6 +671,117 @@ void reminder(char **inputs) {
 
 
 
+
+//struct for process info
+struct processes {
+    int pid;
+    int parentid;
+    char name[256];
+};
+
+
+//helper for recursive printing
+void tree_helper(struct processes *process, int count, int p_pid, int depth) {
+   
+       	for (int x = 0; x < count; x++) {
+       
+	       	if (process[x].parentid == p_pid) {
+           
+		       	
+           		//indentation based on depth
+		       	for (int j = 0; j < depth; j++) {
+               
+			       	printf("  ");
+            	}
+           
+		       	if (depth > 0){
+		   
+		   
+			       	printf("|- ");
+	   	 }
+            printf("%s [%d]\n", process[x].name, process[x].pid);
+            
+            //recursively print childs
+	tree_helper(process, count, process[x].pid, depth + 1);
+        }
+    }
+}
+
+
+void pstree(char **inputs) {
+   
+       	DIR *curr = opendir("/proc");
+   
+       	if (!curr) {
+       
+	       	perror("cant open proc");
+       
+	       	return;
+    }
+
+    int cap = 1024;
+   
+    struct processes *process = malloc(sizeof(struct processes) * cap);
+   
+    int count = 0;
+
+    struct dirent *directory;
+    
+    //iterate through proc except non numeric
+   
+    while ((directory = readdir(curr)) != NULL) {
+        
+        if (!isdigit((*directory).d_name[0])){
+	       
+		continue;
+    }
+        int curr_pid = atoi((*directory).d_name);
+       
+       	char filepath[256];
+       
+       	snprintf(filepath, sizeof(filepath), "/proc/%d/stat", curr_pid);
+
+        //opening stat file
+        FILE *curr_file = fopen(filepath, "r");
+       
+       	if (curr_file) {
+            int parent_pid;
+            char proc_name[256];
+            
+            
+            
+            //parsing the stat file and grabbing the name
+            if (fscanf(curr_file, "%*d (%[^)]) %*c %d", proc_name, &parent_pid) == 2) {
+                
+                //expanding array if necessary
+                if (count >= cap) {
+                    
+			cap *= 2;
+                   
+		       	process = realloc(process, sizeof(struct processes) * cap);
+                }
+                
+                process[count].pid =curr_pid;
+                process[count].parentid = parent_pid;
+                strncpy(process[count].name, proc_name, 255);
+                count++;
+            }
+            fclose(curr_file);
+        }
+    }
+    closedir(curr);
+
+    //print from root
+    printf("System Process Tree:\n");
+    tree_helper(process, count, 0, 0);
+
+    free(process);
+}
+
+
+
+
+
 int process_command(struct command_t *command) {
   int r;
   if (strcmp(command->name, "") == 0)
@@ -828,6 +940,15 @@ int process_command(struct command_t *command) {
    
 	    return SUCCESS;
   }
+
+    if (strcmp(command->name, "pstree") == 0) {
+     
+	    pstree(command->args);
+     
+	    exit(SUCCESS);
+    }
+
+
 
     char *currpath = path_resolver(command->name);
     execv(currpath, command->args);
